@@ -4,6 +4,7 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 
+
 # =========================
 # HEADER
 # =========================
@@ -23,14 +24,14 @@ def show_header(text_title: str):
 
 
 # =========================
-# DATA LOAD FUNCTION
+# CARGA DE DATOS
 # =========================
 @st.cache_data
 def load_data(url):
     pagina = requests.get(url).json()
     ligas = pagina['data']['es']['feeds']
 
-    # Filtrar estaciones
+    # Filtrar feeds de estaciones
     ligas_estaciones = [l for l in ligas if 'station' in l['name']]
 
     liga1 = ligas_estaciones[0]
@@ -43,17 +44,20 @@ def load_data(url):
     df2 = pd.DataFrame(data2)
 
     cols = ['station_id', 'name', 'lat', 'lon', 'capacity']
+
     df1 = df1.reindex(columns=cols)
     df2 = df2.reindex(columns=cols)
 
     df = pd.concat([df1, df2], ignore_index=True)
+
+    # Limpieza importante
     df = df.dropna(subset=['lat', 'lon'])
 
     return df
 
 
 # =========================
-# UI
+# APP UI
 # =========================
 head_c = st.container()
 main_c = st.container()
@@ -61,7 +65,7 @@ main_c = st.container()
 with head_c:
     show_header("Mi Dashboard de Estaciones")
 
-# URL base (la que ya usas tú)
+# URL del dataset
 url = st.text_input("Ingresa URL del dataset", "")
 
 if url:
@@ -73,11 +77,13 @@ if url:
 
         st.subheader("🗺️ Mapa de estaciones")
 
+        # Centro del mapa
         centro_lat = df['lat'].mean()
         centro_lon = df['lon'].mean()
 
         mapa = folium.Map(location=[centro_lat, centro_lon], zoom_start=12)
 
+        # Marcadores
         for _, row in df.iterrows():
             folium.Marker(
                 location=[row['lat'], row['lon']],
@@ -85,3 +91,7 @@ if url:
             ).add_to(mapa)
 
         st_folium(mapa, width=700, height=500)
+
+else:
+    st.info("Ingresa una URL para cargar los datos")
+    
