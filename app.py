@@ -8,50 +8,53 @@ from streamlit_folium import st_folium
 # =========================
 # HEADER
 # =========================
-def show_header(text_title: str):
+def show_header(title):
     col1, col2 = st.columns([1, 6])
-    
+
     with col1:
         st.image(
             "https://upload.wikimedia.org/wikipedia/commons/3/32/Universidad_Panamericana_Logo_Dorado.jpg",
             width=90
         )
-        
+
     with col2:
-        st.title(text_title)
-        st.caption("📘 Business Intelligence - Streamlit Dashboard")
-        st.caption("Universidad Panamericana")
+        st.title(title)
+        st.caption("📘 Ecobici Dashboard - Business Intelligence")
 
 
 # =========================
-# CARGA DE DATOS
+# CARGA DE DATOS GBFS
 # =========================
 @st.cache_data
-def load_data(url):
-    pagina = requests.get(url).json()
-    ligas = pagina['data']['es']['feeds']
+def load_ecobici():
 
-    # Filtrar feeds de estaciones
-    ligas_estaciones = [l for l in ligas if 'station' in l['name']]
+    url = "https://gbfs.mex.lyftbikes.com/gbfs/gbfs.json"
 
-    liga1 = ligas_estaciones[0]
-    liga2 = ligas_estaciones[1]
+    data = requests.get(url).json()
+    feeds = data["data"]
 
-    data1 = requests.get(liga1['url']).json()['data']['stations']
-    data2 = requests.get(liga2['url']).json()['data']['stations']
+    # idioma dinámico
+    lang = list(feeds.keys())[0]
+    feeds_list = feeds[lang]["feeds"]
 
-    df1 = pd.DataFrame(data1)
-    df2 = pd.DataFrame(data2)
+    station_info_url = None
+    station_status_url = None
 
-    cols = ['station_id', 'name', 'lat', 'lon', 'capacity']
+    for f in feeds_list:
+        if "station_information" in f["name"]:
+            station_info_url = f["url"]
+        if "station_status" in f["name"]:
+            station_status_url = f["url"]
 
-    df1 = df1.reindex(columns=cols)
-    df2 = df2.reindex(columns=cols)
+    # descargar datos
+    info = requests.get(station_info_url).json()["data"]["stations"]
+    status = requests.get(station_status_url).json()["data"]["stations"]
 
-    df = pd.concat([df1, df2], ignore_index=True)
+    df_info = pd.DataFrame(info)
+    df_status = pd.DataFrame(status)
 
-    # Limpieza importante
-    df = df.dropna(subset=['lat', 'lon'])
+    # merge
+    df = df_info.merge(df_status, on="station_id")
 
     return df
 
@@ -59,39 +62,32 @@ def load_data(url):
 # =========================
 # APP UI
 # =========================
-head_c = st.container()
-main_c = st.container()
+head = st.container()
+main = st.container()
 
-with head_c:
-    show_header("Mi Dashboard de Estaciones")
+with head:
+    show_header("🚲 Ecobici CDMX Dashboard")
 
-# URL del dataset
-url = st.text_input("Ingresa URL del dataset", "")
+df = load_ecobici()
 
-if url:
-    df = load_data(url)
+with main:
 
-    with main_c:
-        st.subheader("📊 Datos cargados")
-        st.dataframe(df)
+    st.subheader("📊 Datos de estaciones")
+    st.dataframe(df)
 
-        st.subheader("🗺️ Mapa de estaciones")
+    st.subheader("🗺️ Mapa de estaciones")
 
-        # Centro del mapa
-        centro_lat = df['lat'].mean()
-        centro_lon = df['lon'].mean()
+    # centro mapa
+    centro_lat = df["lat"].mean()
+    centro_lon = df["lon"].mean()
 
-        mapa = folium.Map(location=[centro_lat, centro_lon], zoom_start=12)
+    mapa = folium.Map(location=[centro_lat, centro_lon], zoom_start=12)
 
-        # Marcadores
-        for _, row in df.iterrows():
-            folium.Marker(
-                location=[row['lat'], row['lon']],
-                popup=row['name']
-            ).add_to(mapa)
+    for _, row in df.iterrows():
+        folium.Marker(
+            location=[row["lat"], row["lon"]],
+            popup=f"{row['name']}"
+        ).add_to(mapa)
 
-        st_folium(mapa, width=700, height=500)
-
-else:
-    st.info("Ingresa una URL para cargar los datos")
+    st_folium(mapa, width=700, height=500)
     
